@@ -1,4 +1,4 @@
-name: Release
+name: Release installers
 
 # Runs the verification suite, then builds macOS (.dmg/.zip), Windows
 # (.exe portable/.exe installer/.zip) and Linux (.AppImage/.deb) installers in

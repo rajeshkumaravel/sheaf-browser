@@ -1,4 +1,4 @@
-name: CI
+name: CI checks
 
 # Fast checks on every push and PR, plus the full verification suite — on all
 # three release platforms.
