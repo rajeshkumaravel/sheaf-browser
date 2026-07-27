@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+
+# Build output
+# out/  = electron-vite bundles (main / preload / renderer)
+# dist/ = electron-builder installers (.dmg, .exe, .AppImage)
+out/
+dist/
+build/
+release/
+*.tsbuildinfo
+
+# Native module build artifacts
+prebuilds/
+*.node
+
+# Unpacked third-party Chrome extensions loaded at runtime.
+# These are user-supplied and must never be committed.
+extensions/*
+!extensions/.gitkeep
+
+# Logs & diagnostics
+*.log
+npm-debug.log*
+report.*.json
+
+# Test / verification output
+coverage/
+playwright-report/
+test-results/
+shots/
+.verify-profile/
+
+# Local environment & secrets — never commit these.
+# PUBLIC REPO: internal hostnames, proxy configs and environment profiles
+# belong in the local config under userData, never in git.
+.env
+.env.*
+!.env.example
+sheaf.local.json
+*.pem
+*.p12
+*.mobileprovision
+.notarize.json
+
+# Editor / tooling
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.claude/settings.local.json
+
+# OS cruft
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+
+# Raw screenshot captures — the curated set in screenshots/ is what ships.
+screenshots/raw/
+.shot-tmp/
+.walk-tmp/
+.shot-profile/
+.claude/
+articles/
+site/
+site-3d/

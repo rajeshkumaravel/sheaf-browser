@@ -1,0 +1,95 @@
+{
+  "name": "sheaf-browser",
+  "productName": "Sheaf Browser",
+  "version": "1.0.0",
+  "author": {
+    "name": "Rajesh Kumaravel",
+    "email": "16378062+rajeshkumaravel@users.noreply.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rajeshkumaravel/sheaf-browser.git"
+  },
+  "description": "Sheaf Browser — a browser for development teams; binds Letterhead, Folio, Imprint and Mailroom into one application.",
+  "main": "./out/main/index.js",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "desktopName": "sheaf-browser.desktop",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:preload": "tsc --noEmit -p tsconfig.preload.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:preload && npm run typecheck:web",
+    "build": "electron-vite build",
+    "build:dir": "electron-vite build && electron-builder --dir",
+    "build:mac": "electron-vite build && electron-builder --mac --publish never",
+    "build:win": "electron-vite build && electron-builder --win --x64 --publish never --config.npmRebuild=false --config.nodeGypRebuild=false",
+    "build:linux": "electron-vite build && electron-builder --linux --publish never",
+    "verify": "electron-vite build && node scripts/verify.mjs",
+    "postinstall": "electron-builder install-app-deps",
+    "screenshots": "electron-vite build && node scripts/screenshots.mjs && node scripts/make-walkthrough.mjs",
+    "icons": "node scripts/make-icons.mjs && cd resources && magick icon-1024.png -resize 512x512 icon.png && mkdir -p icon.iconset && for s in 16 32 128 256 512; do magick icon-1024.png -resize ${s}x${s} icon.iconset/icon_${s}x${s}.png; magick icon-1024.png -resize $((s*2))x$((s*2)) icon.iconset/icon_${s}x${s}@2x.png; done && iconutil -c icns icon.iconset -o icon.icns && rm -rf icon.iconset && magick icon-1024.png -define icon:auto-resize=256,128,64,48,32,24,16 icon.ico && magick icon-1024.png -resize 64x64 ../site/favicon.png",
+    "site:frames": "node scripts/make-site-frames.mjs",
+    "site:serve": "npx --yes serve site",
+    "site3d:serve": "npx --yes serve site-3d"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.18",
+    "better-sqlite3": "^12.11.1",
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "playwright-core": "^1.61.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "zustand": "^5.0.14"
+  },
+  "mac": {
+    "target": "dmg",
+    "category": "public.app-category.developer-tools"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "allowElevation": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  }
+}

@@ -1,0 +1,98 @@
+name: CI checks
+
+# Fast checks on every push and PR, plus the full verification suite — on all
+# three release platforms.
+#
+#   check  — type-check all three tsconfig projects and confirm the app bundles.
+#   verify — launch the BUILT app under the Playwright Electron driver, walk
+#            the whole feature surface, and record every network request:
+#            anything unexpected fails the run. This is the suite behind the
+#            README's "no network calls of its own" claim. Linux runners have
+#            no display, so the suite runs under xvfb there; macOS and Windows
+#            runners have a desktop session and need nothing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Type-check & bundle (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check (node + preload + web)
+        run: npm run typecheck
+
+      - name: Bundle (electron-vite build)
+        run: npx electron-vite build
+
+  verify:
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure Electron runtime is present
+        shell: bash
+        run: |
+          if [ ! -x node_modules/electron/dist/electron ]; then
+            echo "Electron binary missing; forcing download"
+            ELECTRON_SKIP_BINARY_DOWNLOAD=0 node node_modules/electron/install.js
+          fi
+          ls -la node_modules/electron/dist
+          node -e "const fs=require('fs'); const p=require('electron'); console.log('electron:', p); console.log('exists:', fs.existsSync(p));"
+
+      - name: Run verification suite (Linux, under xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm run verify
+
+      - name: Run verification suite (macOS / Windows)
+        if: runner.os != 'Linux'
+        run: npm run verify
+
+      # Every step screenshots into shots/ — attach them so a red run (or a
+      # spot-check of a green one) carries its own evidence.
+      - name: Upload step screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: verify-shots-${{ matrix.os }}
+          path: shots/
+          if-no-files-found: ignore
+          retention-days: 14
