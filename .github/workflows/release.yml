@@ -1,0 +1,329 @@
+name: Release
+
+# Runs the verification suite, then builds macOS (.dmg/.zip), Windows
+# (.exe portable/.exe installer/.zip) and Linux (.AppImage/.deb) installers in
+# parallel, uploads each
+# as a workflow Artifact, and creates a GitHub Release at a tag with the
+# installers attached.
+#
+# Run it either way:
+#   • Actions tab → "Release" → Run workflow  (tags v<version> from package.json)
+#   • or push a tag:  git tag v0.1.0 && git push origin v0.1.0
+#
+# Builds are UNSIGNED by design (see electron-builder.yml and the README's
+# Installing section) — CSC_IDENTITY_AUTO_DISCOVERY=false stops electron-builder
+# from hunting for a signing identity on CI.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (default: v<version> from package.json)'
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark the release as a pre-release'
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+
+# One release run at a time per ref; cancel superseded runs.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # required to create the tag and release
+
+jobs:
+  # A release only exists if the built app passes the full suite — including
+  # the network-silence check. This keeps the README's claim honest.
+  verify:
+    name: Verify before building
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure Electron runtime is present
+        shell: bash
+        run: |
+          if [ ! -x node_modules/electron/dist/electron ]; then
+            echo "Electron binary missing; forcing download"
+            ELECTRON_SKIP_BINARY_DOWNLOAD=0 node node_modules/electron/install.js
+          fi
+          ls -la node_modules/electron/dist
+          node -e "const fs=require('fs'); const p=require('electron'); console.log('electron:', p); console.log('exists:', fs.existsSync(p));"
+
+      - name: Run verification suite
+        run: xvfb-run --auto-servernum npm run verify
+
+      - name: Upload step screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-verify-shots
+          path: shots/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # let the other platforms finish even if one fails
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS
+            builder_target: --mac
+            artifact_name: installer-macos
+            artifact_glob: |
+              dist/*.dmg
+              dist/*.dmg.blockmap
+              dist/*.zip
+              dist/latest*.yml
+          - os: windows-latest
+            name: Windows
+            builder_target: --win
+            artifact_name: installer-windows
+            artifact_glob: |
+              dist/*.exe
+              dist/*.exe.blockmap
+              dist/*.zip
+              dist/latest*.yml
+          - os: ubuntu-latest
+            name: Linux
+            builder_target: --linux
+            artifact_name: installer-linux
+            artifact_glob: |
+              dist/*.AppImage
+              dist/*.deb
+              dist/latest*.yml
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Clean dist
+        run: node -e "require('fs').rmSync('dist',{recursive:true,force:true})"
+
+      - name: Build installer
+        run: npx electron-vite build && npx electron-builder ${{ matrix.builder_target }} --publish never
+        env:
+          # Unsigned open-source builds — never hunt for a signing identity.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate Windows updater metadata
+        if: matrix.name == 'Windows'
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs')
+          const path = require('path')
+
+          function safeDecode(value) {
+            try {
+              return decodeURIComponent(value)
+            } catch {
+              return value
+            }
+          }
+
+          function normalizeName(name) {
+            return name.toLowerCase().replace(/[^a-z0-9.]/g, '')
+          }
+
+          const yml = path.join('dist', 'latest.yml')
+          if (!fs.existsSync(yml)) {
+            throw new Error('dist/latest.yml is missing')
+          }
+          const text = fs.readFileSync(yml, 'utf8')
+          const m = /^path:\s*(.+)$/m.exec(text)
+          if (!m) {
+            throw new Error('latest.yml has no "path" entry')
+          }
+          const installer = m[1].trim()
+          const decodedInstaller = safeDecode(installer)
+          const distFiles = fs.readdirSync('dist').filter((f) => fs.statSync(path.join('dist', f)).isFile())
+          const candidates = [installer, decodedInstaller]
+
+          let matched = null
+          for (const candidate of candidates) {
+            const direct = path.join('dist', candidate)
+            if (fs.existsSync(direct)) {
+              matched = candidate
+              break
+            }
+          }
+
+          if (!matched) {
+            const wanted = normalizeName(path.basename(decodedInstaller))
+            matched = distFiles.find((f) => normalizeName(f) === wanted) || null
+          }
+
+          if (!matched) {
+            const distExeFiles = distFiles.filter((f) => f.toLowerCase().endsWith('.exe'))
+            const similar = distExeFiles.filter((f) => {
+              const n = normalizeName(f)
+              return n.includes('setup') || n.includes('sheaf')
+            })
+            throw new Error(
+              [
+                `latest.yml points to missing installer: ${installer}`,
+                `decoded path: ${decodedInstaller}`,
+                `dist exe files: ${distExeFiles.join(', ') || '(none)'}`,
+                `similar exe files: ${similar.join(', ') || '(none)'}`
+              ].join('\n')
+            )
+          }
+
+          console.log(`latest.yml path OK: ${installer} -> ${matched}`)
+          NODE
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download all installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: installer-*
+          path: artifacts
+
+      - name: Resolve release tag
+        id: meta
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v${VERSION}"
+          fi
+          DATE_STR="$(node -e "
+            const now = new Date();
+            const day = now.getUTCDate();
+            const s = ['th','st','nd','rd'];
+            const v = day % 100;
+            const ord = s[(v - 20) % 10] || s[v] || s[0];
+            const month = now.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
+            console.log(\`\${month} \${day}\${ord}, \${now.getUTCFullYear()}\`);
+          ")"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE_STR}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${TAG} (${DATE_STR})"
+
+      - name: List downloaded files
+        shell: bash
+        run: find artifacts -type f -print
+
+      - name: Log artifact download URLs
+        shell: bash
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          node - <<'NODE'
+          const fs = require('fs')
+          const path = require('path')
+
+          const root = 'artifacts'
+          const tag = process.env.TAG
+          const repo = process.env.REPO
+          const out = []
+
+          function walk(dir) {
+            for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+              const p = path.join(dir, ent.name)
+              if (ent.isDirectory()) walk(p)
+              else out.push(ent.name)
+            }
+          }
+
+          walk(root)
+          out.sort()
+
+          console.log(`Release download URLs for ${repo} @ ${tag}:`)
+          for (const file of out) {
+            const encoded = encodeURIComponent(file)
+            console.log(`https://github.com/${repo}/releases/download/${tag}/${encoded}`)
+          }
+          NODE
+
+      - name: Create release and attach installers
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }} (${{ steps.meta.outputs.date }})
+          draft: false
+          prerelease: ${{ inputs.prerelease || false }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.zip
+            artifacts/**/*.blockmap
+            artifacts/**/*.yml
+          body: |
+            Desktop installers for **Sheaf Browser** — a browser for development teams.
+
+            | Platform | Download |
+            |----------|----------|
+            | macOS (Apple silicon / Intel) | `*.dmg` (or `*.zip`) |
+            | Windows (x64) | `*.exe` (NSIS installer + portable) or `*.zip` |
+            | Linux | `*.AppImage` (x64 / arm64) or `*.deb` (x64) |
+
+            > These builds are **unsigned** (see the README's Installing section).
+            > macOS blocks the first launch — clear the quarantine flag once:
+            > `xattr -dr com.apple.quarantine /Applications/Sheaf.app`.
+            > Windows may show a SmartScreen prompt — More info → Run anyway.
+
+            Every release passes the full verification suite, including the
+            network-silence check: the built app is driven end-to-end while all
+            traffic is recorded, and anything unexpected fails the build.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
