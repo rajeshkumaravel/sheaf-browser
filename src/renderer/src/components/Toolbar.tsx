@@ -318,6 +318,21 @@ export function Toolbar({
         {THEME_ICON[theme]}
       </button>
       {actions}
+      <span
+        style={{
+          fontSize: '11px',
+          padding: '2px 8px',
+          borderRadius: '10px',
+          background: 'rgba(59, 130, 246, 0.15)',
+          color: '#60a5fa',
+          border: '1px solid rgba(96, 165, 250, 0.3)',
+          fontWeight: 500,
+          marginLeft: '6px',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        v1.0.1 • release check
+      </span>
     </div>
   )
 }
