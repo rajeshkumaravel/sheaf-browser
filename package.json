@@ -38,7 +38,7 @@
     "site3d:serve": "npx --yes serve site-3d"
   },
   "dependencies": {
-    "adm-zip": "^0.5.18",
+    "adm-zip": "^0.6.0",
     "better-sqlite3": "^12.11.1",
     "electron-updater": "^6.8.9"
   },
