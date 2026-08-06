@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { JSX, ReactNode } from 'react'
 import type { DevicePreset } from '@shared/devices'
 import type { DevToolsSide, ThemeMode, TabState } from '@shared/types'
+import pkg from '../../../../package.json'
 
 /** Sentinel option: opens the device manager instead of selecting a device. */
 export const MANAGE_DEVICES = '__manage__'
@@ -331,7 +332,7 @@ export function Toolbar({
           whiteSpace: 'nowrap'
         }}
       >
-        v1.0.1 • release check
+        v{pkg.version} • release check
       </span>
     </div>
   )

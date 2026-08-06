@@ -184,18 +184,19 @@ host is ever contacted. See [SECURITY.md](SECURITY.md).
 
 ## Installing
 
-Sheaf ships **unsigned** — the app is fine, the OS just can't verify a
-publisher, so it warns once per machine.
+Sheaf Browser ships **unsigned** — the app is safe, but macOS Gatekeeper flags un-notarized builds as "damaged" or "broken" on first launch.
 
-**macOS.** A downloaded build may say the app "is damaged" — that's the
-quarantine flag, not damage. After dragging Sheaf to Applications:
+**macOS.** If macOS says the app *"is damaged and can't be opened"*, remove the Gatekeeper quarantine flag and apply an ad-hoc code signature:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Sheaf.app
+# 1. Remove Gatekeeper quarantine attribute
+sudo xattr -rd com.apple.quarantine "/Applications/Sheaf Browser.app"
+
+# 2. Apply ad-hoc code signature (required for Apple Silicon M1/M2/M3/M4)
+codesign --force --deep --sign - "/Applications/Sheaf Browser.app"
 ```
 
-**Windows.** SmartScreen shows "Windows protected your PC" → **More info** →
-**Run anyway**.
+**Windows.** SmartScreen shows "Windows protected your PC" → **More info** → **Run anyway**.
 
 **Linux.** `chmod +x` the AppImage, or install the `.deb`.
 
