@@ -63,6 +63,10 @@ Grab the latest build from the [**Releases**](../../releases) page:
 Builds are **unsigned** — see [Installing](#installing) for the one-time step per
 OS. On first launch Sheaf asks what to call you, and nothing else.
 
+## Donations
+
+If you would like to make a donation to support development, please use [Github Sponsors](https://github.com/sponsors/rajeshkumaravel).
+
 ## Walkthrough
 
 <div align="center">
